@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AZAHAR HEAT — Puerto Azahar, 1989</title>
+<style>
+  :root{
+    --ink:#f5ead9; --amber:#ffb43a; --pink:#ff4f9a; --cyan:#39d5e8; --red:#ff4747;
+    --panel:rgba(12,10,24,.72); --panel-line:rgba(255,180,58,.55);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0b0714;
+    font-family:"Trebuchet MS","Segoe UI",Verdana,sans-serif;color:var(--ink);
+    -webkit-user-select:none;user-select:none}
+  #stage{position:fixed;inset:0}
+  canvas.webgl{display:block;width:100%;height:100%}
+
+  /* ---------- generic HUD chrome ---------- */
+  .hud{position:fixed;pointer-events:none;z-index:5}
+  .plate{background:var(--panel);border:1px solid var(--panel-line);border-radius:8px;
+    box-shadow:0 2px 14px rgba(0,0,0,.45);backdrop-filter:blur(2px)}
+
+  /* wanted + cash, top right */
+  #statusBox{top:14px;right:14px;padding:8px 14px 10px;text-align:right;min-width:190px}
+  #stars{font-size:25px;letter-spacing:3px;line-height:1;color:#5a5470;text-shadow:0 0 6px rgba(0,0,0,.6)}
+  #stars .lit{color:var(--amber);text-shadow:0 0 9px rgba(255,180,58,.9)}
+  #stars.flash .lit{color:var(--red);text-shadow:0 0 12px rgba(255,71,71,.95)}
+  #cashRow{margin-top:3px;font-size:21px;font-weight:700;color:#8be26a;letter-spacing:.5px}
+  #cashRow small{color:var(--ink);font-size:11px;font-weight:400;opacity:.75;letter-spacing:1px}
+  #clockRow{font-size:12px;opacity:.85;letter-spacing:2px;margin-top:1px}
+  #districtRow{font-size:11px;color:var(--cyan);letter-spacing:2.5px;text-transform:uppercase;margin-top:1px}
+
+  /* vitals + minimap, bottom left */
+  #mapBox{left:14px;bottom:14px;padding:8px}
+  #minimap{display:block;width:216px;height:216px;border-radius:6px;background:#101426}
+  #vitals{margin-top:7px;width:216px}
+  .bar{height:9px;border-radius:4px;background:rgba(255,255,255,.14);overflow:hidden;margin-top:4px}
+  .bar>i{display:block;height:100%;border-radius:4px;transition:width .18s ease}
+  #healthFill{background:linear-gradient(90deg,#e8483f,#ff7a4d);width:100%}
+  #armorFill{background:linear-gradient(90deg,#3f8fe8,#57c8ff);width:0%}
+  .barLabel{font-size:9px;letter-spacing:2px;opacity:.8;margin-top:5px}
+
+  /* weapon, bottom right */
+  #weaponBox{right:14px;bottom:14px;padding:9px 14px;text-align:right;min-width:150px}
+  #weaponName{font-size:15px;font-weight:700;letter-spacing:1.5px;color:var(--amber)}
+  #weaponAmmo{font-size:22px;font-weight:700;margin-top:1px}
+  #weaponAmmo small{font-size:12px;opacity:.7;font-weight:400}
+  #speedo{font-size:13px;color:var(--cyan);letter-spacing:1px;margin-top:2px;min-height:16px}
+
+  /* mission banner + objective */
+  #missionBox{top:14px;left:50%;transform:translateX(-50%);width:min(560px,72vw);text-align:center;
+    padding:9px 18px 11px;opacity:0;transition:opacity .35s ease}
+  #missionBox.show{opacity:1}
+  #missionKicker{font-size:10px;letter-spacing:4px;color:var(--pink);text-transform:uppercase}
+  #missionTitle{font-size:21px;font-weight:700;letter-spacing:1px;margin-top:1px}
+  #missionText{font-size:13.5px;opacity:.92;margin-top:2px;line-height:1.35}
+  #objectiveBox{top:118px;left:14px;max-width:320px;padding:8px 12px;font-size:13px;line-height:1.4;opacity:0;transition:opacity .3s}
+  #objectiveBox.show{opacity:1}
+  #objectiveBox b{color:var(--amber);letter-spacing:1px;font-size:11px;display:block;margin-bottom:2px}
+  #objectiveDist{color:var(--cyan);font-weight:700}
+
+  /* centre prompts */
+  #crosshair{top:50%;left:50%;transform:translate(-50%,-50%);font-size:15px;color:rgba(255,255,255,.85);
+    text-shadow:0 0 5px rgba(0,0,0,.8)}
+  #prompt{top:57%;left:50%;transform:translateX(-50%);padding:7px 16px;font-size:14.5px;letter-spacing:.4px;
+    opacity:0;transition:opacity .15s}
+  #prompt.show{opacity:1}
+  #prompt b{color:#0d0a18;background:var(--amber);border-radius:4px;padding:1px 7px;margin-right:8px;font-size:13px}
+  #toast{bottom:158px;left:50%;transform:translateX(-50%);padding:8px 18px;font-size:15px;letter-spacing:.5px;
+    opacity:0;transition:opacity .3s;white-space:nowrap}
+  #toast.show{opacity:1}
+  #toast .money{color:#8be26a;font-weight:700}
+  #radioToast{bottom:196px;left:50%;transform:translateX(-50%);font-size:12.5px;letter-spacing:2px;color:var(--cyan);
+    opacity:0;transition:opacity .3s;text-transform:uppercase}
+  #radioToast.show{opacity:.95}
+  #damageVin{inset:0;background:radial-gradient(ellipse at center,transparent 52%,rgba(200,10,10,.55) 100%);
+    opacity:0;transition:opacity .12s}
+  #fadeVin{inset:0;background:#000;opacity:0;transition:opacity .5s}
+
+  /* ---------- full screens ---------- */
+  .screen{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;text-align:center}
+  .hidden{display:none !important}
+  #startScreen{background:linear-gradient(180deg,rgba(24,8,40,.25) 0%,rgba(10,4,24,.78) 78%);}
+  #gameLogo{font-size:min(96px,13vw);font-weight:900;letter-spacing:2px;line-height:.94;
+    background:linear-gradient(180deg,#ffe9a8 12%,var(--amber) 42%,var(--pink) 88%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 4px 22px rgba(255,79,154,.45))}
+  #gameSub{margin-top:10px;font-size:min(21px,3.4vw);letter-spacing:7px;color:#ffe9c9;text-transform:uppercase;
+    text-shadow:0 2px 12px rgba(0,0,0,.8)}
+  #startMenu{margin-top:38px;display:flex;flex-direction:column;gap:11px;pointer-events:auto}
+  .menuBtn{pointer-events:auto;cursor:pointer;border:1px solid var(--panel-line);background:var(--panel);
+    color:var(--ink);font:inherit;font-size:17px;letter-spacing:2.5px;padding:11px 44px;border-radius:8px;
+    text-transform:uppercase;transition:all .15s}
+  .menuBtn:hover{background:rgba(255,180,58,.22);transform:translateY(-1px)}
+  .menuBtn:disabled{opacity:.38;cursor:default;transform:none}
+  #controlsCard{margin-top:30px;padding:12px 22px;font-size:13px;line-height:1.75;letter-spacing:.4px;text-align:left}
+  #controlsCard b{color:var(--amber);display:inline-block;min-width:118px;letter-spacing:1px}
+  #startFoot{margin-top:24px;font-size:11.5px;letter-spacing:2px;opacity:.65;text-transform:uppercase}
+  #endScreen{background:rgba(8,2,10,.72)}
+  #endTitle{font-size:min(84px,12vw);font-weight:900;letter-spacing:6px;color:var(--red);
+    text-shadow:0 0 34px rgba(255,40,40,.5)}
+  #endText{margin-top:8px;font-size:17px;opacity:.9}
+  #pauseScreen{background:rgba(6,4,16,.66)}
+  #pauseTitle{font-size:52px;font-weight:900;letter-spacing:8px;color:var(--amber)}
+  #shopScreen{background:rgba(6,4,16,.78);justify-content:flex-start;padding-top:7vh}
+  #shopTitle{font-size:38px;font-weight:900;letter-spacing:4px;color:var(--cyan)}
+  #shopSub{font-size:14px;opacity:.85;margin-top:4px;letter-spacing:1px}
+  #shopList{margin-top:22px;display:flex;flex-direction:column;gap:9px;pointer-events:auto;width:min(520px,88vw)}
+  .shopItem{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;text-align:left}
+  .shopItem .nm{font-size:16px;font-weight:700;letter-spacing:.5px}
+  .shopItem .ds{font-size:12px;opacity:.75;margin-top:1px}
+  .shopItem .buy{pointer-events:auto;cursor:pointer;font:inherit;font-size:14px;font-weight:700;color:#0d0a18;
+    background:var(--amber);border:0;border-radius:6px;padding:7px 16px}
+  .shopItem .buy:disabled{background:#5a5470;color:#cfc9dd;cursor:default}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<!-- HUD -->
+<div class="hud plate" id="statusBox">
+  <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+  <div id="cashRow"><small>CASH</small> $0</div>
+  <div id="clockRow">08:00</div>
+  <div id="districtRow">Marina</div>
+</div>
+
+<div class="hud plate" id="mapBox">
+  <canvas id="minimap" width="432" height="432"></canvas>
+  <div id="vitals">
+    <div class="barLabel">HEALTH</div>
+    <div class="bar"><i id="healthFill"></i></div>
+    <div class="barLabel">ARMOUR</div>
+    <div class="bar"><i id="armorFill"></i></div>
+  </div>
+</div>
+
+<div class="hud plate" id="weaponBox">
+  <div id="weaponName">FISTS</div>
+  <div id="weaponAmmo">—</div>
+  <div id="speedo"></div>
+</div>
+
+<div class="hud plate" id="missionBox">
+  <div id="missionKicker">Mission</div>
+  <div id="missionTitle"></div>
+  <div id="missionText"></div>
+</div>
+
+<div class="hud plate" id="objectiveBox"><b>OBJECTIVE</b><span id="objectiveText"></span> <span id="objectiveDist"></span></div>
+<div class="hud" id="crosshair">·</div>
+<div class="hud plate" id="prompt"></div>
+<div class="hud plate" id="toast"></div>
+<div class="hud" id="radioToast"></div>
+<div class="hud" id="damageVin"></div>
+<div class="hud" id="fadeVin"></div>
+
+<!-- START -->
+<div class="screen" id="startScreen">
+  <div id="gameLogo">AZAHAR<br>HEAT</div>
+  <div id="gameSub">Puerto Azahar · 1989</div>
+  <div id="startMenu">
+    <button class="menuBtn" id="btnNew">New Game</button>
+    <button class="menuBtn" id="btnContinue">Continue</button>
+    <button class="menuBtn" id="btnFree">Free Roam</button>
+  </div>
+  <div class="plate" id="controlsCard">
+    <div><b>W A S D</b> move / drive</div>
+    <div><b>Mouse</b> look · <b>Shift</b> sprint · <b>Space</b> jump / handbrake</div>
+    <div><b>F</b> enter / exit car · <b>E</b> talk / accept mission</div>
+    <div><b>Click / R</b> shoot / punch · <b>1 2</b> weapon · <b>Q</b> radio</div>
+    <div><b>M</b> missions · <b>P / Esc</b> pause</div>
+  </div>
+  <div id="startFoot">An original city of sun, salt and bad decisions</div>
+</div>
+
+<!-- END (busted / wasted) -->
+<div class="screen hidden" id="endScreen">
+  <div id="endTitle">COLLARED</div>
+  <div id="endText"></div>
+  <div id="startMenu">
+    <button class="menuBtn" id="btnRespawn">Back on the street</button>
+  </div>
+</div>
+
+<!-- PAUSE -->
+<div class="screen hidden" id="pauseScreen">
+  <div id="pauseTitle">PAUSED</div>
+  <div id="startMenu">
+    <button class="menuBtn" id="btnResume">Resume</button>
+    <button class="menuBtn" id="btnSave">Save game</button>
+    <button class="menuBtn" id="btnQuit">Quit to title</button>
+  </div>
+</div>
+
+<!-- SHOP -->
+<div class="screen hidden" id="shopScreen">
+  <div id="shopTitle">SALVATORE MOTORS</div>
+  <div id="shopSub">Fine automobiles, no questions asked · your cash: <span id="shopCash">$0</span></div>
+  <div id="shopList"></div>
+  <div id="startMenu"><button class="menuBtn" id="btnShopClose">Leave</button></div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
